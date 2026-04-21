@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ski Jump Game</title>
+  <style>
+    body { margin:0; font-family:Arial, sans-serif; text-align:center; background:#87ceeb; overflow:hidden; }
+    h1 { margin:10px 0 0; }
+    #instructions { font-size:16px; margin-top:5px; }
+
+    #gameContainer {
+      position:relative; width:800px; height:400px; margin:15px auto;
+      overflow:hidden; border:3px solid #333; border-radius:12px;
+      background:linear-gradient(#6ec6ff 0%, #e6f7ff 40%, #ffffff 100%);
+    }
+
+    .mountain {
+      position:absolute; bottom:0; width:0; height:0;
+      border-left:150px solid transparent;
+      border-right:150px solid transparent;
+      border-bottom:220px solid #9aa3a8; opacity:0.9;
+    }
+    .mountain.snow::after {
+      content:''; position:absolute; left:-80px; top:50px;
+      border-left:80px solid transparent;
+      border-right:80px solid transparent;
+      border-bottom:100px solid #fff;
+    }
+
+    #ground {
+      position:absolute; bottom:0; width:100%; height:60px;
+      background:linear-gradient(#ffffff,#e0f7ff);
+    }
+
+    /* Smaller, more human-like skier */
+    #player {
+      position:absolute; bottom:60px; left:80px;
+      width:40px; height:40px;
+    }
+
+    /* head */
+    #player .head {
+      position:absolute; width:12px; height:12px; border-radius:50%;
+      background:#ffcc99; top:2px; left:14px;
+    }
+
+    /* body */
+    #player .body {
+      position:absolute; width:6px; height:16px; background:#ff3b3b;
+      top:12px; left:17px;
+      transform:skewX(-10deg);
+    }
+
+    /* legs */
+    #player .leg1, #player .leg2 {
+      position:absolute; width:4px; height:12px; background:#333;
+      top:26px;
+    }
+    #player .leg1 { left:14px; transform:rotate(20deg); }
+    #player .leg2 { left:22px; transform:rotate(-10deg); }
+
+    /* skis */
+    #player .ski1, #player .ski2 {
+      position:absolute; width:22px; height:3px; background:black;
+      bottom:0;
+    }
+    #player .ski1 { left:8px; transform:skewX(-25deg); }
+    #player .ski2 { left:16px; transform:skewX(-25deg); }
+
+    .tree {
+      position:absolute; bottom:60px; width:35px; height:60px;
+      background:linear-gradient(green,darkgreen);
+      right:-40px; border-radius:6px;
+    }
+
+    .snow {
+      position:absolute; width:6px; height:6px;
+      background:white; border-radius:50%; opacity:0.9;
+    }
+
+    #startBtn { padding:10px 20px; font-size:16px; cursor:pointer; margin-top:5px; }
+    #status { font-size:18px; margin-top:8px; }
+  </style>
+</head>
+<body>
+
+  <h1>⛷️ Ski Jump Game</h1>
+  <div id="instructions">Press the space button to jump!</div>
+  <button id="startBtn">Go</button>
+  <div id="status">Press Go to Start</div>
+
+  <div id="gameContainer">
+    <div class="mountain snow" style="left:100px;"></div>
+    <div class="mountain snow" style="left:350px; transform:scale(0.8);"></div>
+    <div class="mountain snow" style="left:600px; transform:scale(0.6);"></div>
+    <div id="ground"></div>
+
+    <div id="player">
+      <div class="head"></div>
+      <div class="body"></div>
+      <div class="leg1"></div>
+      <div class="leg2"></div>
+      <div class="ski1"></div>
+      <div class="ski2"></div>
+    </div>
+  </div>
+
+  <audio id="jumpSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+  <audio id="loseSound" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
+  <audio id="winSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+
+  <script>
+    const player = document.getElementById('player');
+    const game = document.getElementById('gameContainer');
+    const startBtn = document.getElementById('startBtn');
+    const statusText = document.getElementById('status');
+
+    const jumpSound = document.getElementById('jumpSound');
+    const loseSound = document.getElementById('loseSound');
+    const winSound = document.getElementById('winSound');
+
+    let isJumping=false, gameRunning=false, obstacleCount=0;
+    let gameLoop, speed=6, spawnRate=1400;
+
+    function jump(){
+      if(isJumping||!gameRunning) return;
+      isJumping=true;
+      jumpSound.currentTime=0; jumpSound.play();
+
+      let pos=60;
+      let up=setInterval(()=>{
+        if(pos>=170){
+          clearInterval(up);
+          let down=setInterval(()=>{
+            if(pos<=60){ clearInterval(down); isJumping=false; }
+            else{ pos-=7; player.style.bottom=pos+'px'; }
+          },20);
+        } else { pos+=7; player.style.bottom=pos+'px'; }
+      },20);
+    }
+
+    document.addEventListener('keydown',e=>{ if(e.code==='Space') jump(); });
+
+    function createTree(){
+      const tree=document.createElement('div'); tree.classList.add('tree'); game.appendChild(tree);
+      let pos=800;
+
+      let move=setInterval(()=>{
+        if(!gameRunning){ clearInterval(move); tree.remove(); return; }
+
+        pos-=speed; tree.style.right=(800-pos)+'px';
+        const playerBottom=parseInt(getComputedStyle(player).bottom);
+
+        if(pos<140 && pos>80 && playerBottom<100){ endGame(false); clearInterval(move); }
+
+        if(pos<0){
+          tree.remove(); obstacleCount++; updateStatus(); clearInterval(move);
+          speed+=0.4; spawnRate=Math.max(500, spawnRate-60); resetSpawner();
+          if(obstacleCount>=20) endGame(true);
+        }
+      },20);
+    }
+
+    function createSnow(){
+      const snow=document.createElement('div'); snow.classList.add('snow');
+      snow.style.left=Math.random()*800+'px'; game.appendChild(snow);
+      let top=0;
+      let fall=setInterval(()=>{
+        if(!gameRunning){ clearInterval(fall); snow.remove(); return; }
+        top+=4; snow.style.top=top+'px';
+        if(top>400){ snow.remove(); clearInterval(fall); }
+      },30);
+    }
+
+    function resetSpawner(){ clearInterval(gameLoop); gameLoop=setInterval(createTree, spawnRate); }
+
+    function startGame(){
+      gameRunning=true; obstacleCount=0; speed=6; spawnRate=1400;
+      statusText.textContent='Game Started!';
+      gameLoop=setInterval(createTree, spawnRate);
+      setInterval(createSnow,150);
+    }
+
+    function endGame(win){
+      gameRunning=false; clearInterval(gameLoop);
+      if(win){ winSound.play(); statusText.textContent='🎉 You Win!'; }
+      else{ loseSound.play(); statusText.textContent='💥 You Lost!'; }
+    }
+
+    function updateStatus(){ statusText.textContent=`Obstacles: ${obstacleCount}/20`; }
+
+    startBtn.addEventListener('click',()=>{ if(!gameRunning) startGame(); });
+  </script>
+
+</body>
+</html>
+
